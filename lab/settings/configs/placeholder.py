@@ -14,11 +14,19 @@ class Placeholder(Enum):
 
     HISTORY_ANSWER = auto()
     INSTRUCTIONS = auto()
+    FILLED_PROMPT = auto()
 
     @classmethod
     def update_param_placeholders(cls, *args, **kwargs):
-        new_args = [Registry.get(arg) if isinstance(arg, cls) else arg for arg in args]
+        new_args = [
+            Registry.get(arg) if isinstance(arg, cls) else arg for arg in args
+        ]
         new_kwargs = {
-            k: Registry.get(v) if isinstance(v, cls) else v for k, v in kwargs.items()
+            k: Registry.get(v) if isinstance(v, cls) else v
+            for k, v in kwargs.items()
         }
         return new_args, new_kwargs
+
+    @classmethod
+    def get_value(cls, placeholder):
+        return Registry.get(placeholder)
