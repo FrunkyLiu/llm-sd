@@ -39,7 +39,7 @@ class LayoutRenderer:
         st_element = condition["class"]
         args = condition.get("args", ())
         kwargs = condition.get("kwargs", {})
-        response_key = condition.get("response_key")
+        response_key = condition.get("response_key", None)
 
         return self._build_streamlit(
             st_element, *args, response_key=response_key, **kwargs
@@ -70,7 +70,7 @@ class LayoutRenderer:
         st_element = config["class"]
         args = config.get("args", ())
         kwargs: Dict = config.get("kwargs", {})
-        response_key = config.get("response_key", None)
+        # response_key = config.get("response_key", None)
         st_obj = st_element(*args, **kwargs)
         children = config.get("children", [])
 
@@ -95,7 +95,10 @@ class LayoutRenderer:
             st_element = config["class"]
             args = config.get("args", ())
             kwargs = config.get("kwargs", {})
-            self._build_streamlit(st_element, *args, **kwargs)
+            response_key = config.get("response_key")
+            self._build_streamlit(
+                st_element, *args, response_key=response_key, **kwargs
+            )
 
         st.write(st.session_state)
         return
