@@ -1,19 +1,12 @@
 import inspect
-from typing import Callable, Dict
+from typing import Any, Callable, Dict, List
 
 import streamlit as st
 from settings.configs.placeholder import Placeholder
 from utils.context_key import create_context_key
-from utils.session_state_registry import Registry
 
 
 class LayoutRenderer:
-    def __init__(self):
-        self._layout = None
-
-    def __call__(self, layout, **kwargs):
-        self._layout = layout
-        self._layout(**kwargs)
 
     def _placeholder_wrapper(
         self, st_element: Callable, *args, response_key=None, **kwargs
@@ -21,19 +14,15 @@ class LayoutRenderer:
         sig = inspect.signature(st_element)
         has_key_param = "key" in sig.parameters
         if "key" not in kwargs:
-            args_repr = "|".join(map(str, args))
-            kwargs_repr = "|".join(
-                f"{k}={v}" for k, v in sorted(kwargs.items())
-            )
-            key = create_context_key()
-            key = key + args_repr + kwargs_repr
+
+            key = create_context_key(*args, **kwargs)
             if has_key_param:
                 kwargs["key"] = key
         else:
             key = kwargs["key"]
 
         if response_key:
-            Registry.register(response_key, key)
+            Placeholder.bind_placeholder(response_key, key)
 
         args, kwargs = Placeholder.update_param_placeholders(*args, **kwargs)
 
@@ -43,9 +32,73 @@ class LayoutRenderer:
             st.session_state[key] = result
         return result
 
+    def _check_condition(self, condition: Dict[str, Any]) -> bool:
+        if isinstance(condition, Placeholder):
+            return bool(Placeholder.get_value(condition))
+
+        st_element = condition["class"]
+        args = condition.get("args", ())
+        kwargs = condition.get("kwargs", {})
+        response_key = condition.get("response_key")
+
+        return self._build_streamlit(
+            st_element, *args, response_key=response_key, **kwargs
+        )
+
+    def __is_context_manager(self, obj) -> bool:
+        return hasattr(obj, "__enter__") and hasattr(obj, "__exit__")
+
     def _build_streamlit(self, st_element: Callable, *args, **kwargs):
         result = self._placeholder_wrapper(st_element, *args, **kwargs)
         return result
+
+    def _handle_streamlit_objects(
+        self, st_obj: Any, children: List[Dict]
+    ) -> None:
+        if isinstance(st_obj, (list, tuple)):
+            for i, obj in enumerate(st_obj):
+                if children[i] is not None:
+                    with obj:
+                        self.render_layout([children[i]])
+        elif self.__is_context_manager(st_obj):
+            with st_obj:
+                self.render_layout(children)
+        else:
+            st_obj(self.render_layout)(children)
+
+    def _children_parser(self, config: Dict):
+        st_element = config["class"]
+        args = config.get("args", ())
+        kwargs: Dict = config.get("kwargs", {})
+        response_key = config.get("response_key", None)
+        st_obj = st_element(*args, **kwargs)
+        children = config.get("children", [])
+
+        if not st_obj or not children:
+            return
+
+        self._handle_streamlit_objects(st_obj, children)
+
+    def render_layout(self, configs: List[Dict[str, Any]]) -> None:
+        for config in configs:
+            # Check conditions early and continue if not met
+            if "condition" in config:
+                if not self._check_condition(config["condition"]):
+                    continue
+
+            # Handle children configurations
+            if "children" in config:
+                self._children_parser(config)
+                continue
+
+            # Process regular streamlit elements
+            st_element = config["class"]
+            args = config.get("args", ())
+            kwargs = config.get("kwargs", {})
+            self._build_streamlit(st_element, *args, **kwargs)
+
+        st.write(st.session_state)
+        return
 
     def render_page(self, configs: list[Dict]):
         for config in configs:
@@ -53,10 +106,13 @@ class LayoutRenderer:
                 condition = config["condition"]
                 if not Placeholder.get_value(condition):
                     continue
+            if "children" in config:
+                self._children_parser(config)
+                continue
             st_element = config["class"]
             args = config.get("args", ())
             kwargs: Dict = config.get("kwargs", {})
-            response_key = kwargs.pop("response_key", None)
+            response_key = config.pop("response_key")
             self._build_streamlit(
                 st_element, *args, response_key=response_key, **kwargs
             )

@@ -17,6 +17,10 @@ class Placeholder(Enum):
     FILLED_PROMPT = auto()
 
     @classmethod
+    def bind_placeholder(cls, placeholder, value):
+        Registry.register(placeholder, value)
+
+    @classmethod
     def update_param_placeholders(cls, *args, **kwargs):
         new_args = [
             Registry.get(arg) if isinstance(arg, cls) else arg for arg in args

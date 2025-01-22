@@ -17,7 +17,6 @@ def enable_params(params):
 
 slider_top_p = {
     "class": st.slider,
-    "args": (),
     "kwargs": {
         "label": "Top-p",
         "value": 0.50,
@@ -25,26 +24,24 @@ slider_top_p = {
         "max_value": 1.0,
         "step": 0.01,
         "format": "%.2f",
-        "response_key": Placeholder.GENERATE_TOP_P,
     },
+    "response_key": Placeholder.GENERATE_TOP_P,
 }
 
 slider_top_k = {
     "class": st.slider,
-    "args": (),
     "kwargs": {
         "label": "Top-k",
         "value": 50,
         "min_value": 1,
         "max_value": 100,
         "step": 1,
-        "response_key": Placeholder.GENERATE_TOP_K,
     },
+    "response_key": Placeholder.GENERATE_TOP_K,
 }
 
 slider_temperature = {
     "class": st.slider,
-    "args": (),
     "kwargs": {
         "label": "Temperature",
         "value": 0.50,
@@ -52,45 +49,65 @@ slider_temperature = {
         "max_value": 1.0,
         "step": 0.01,
         "format": "%.2f",
-        "response_key": Placeholder.GENERATE_TEMPERATURE,
     },
+    "response_key": Placeholder.GENERATE_TEMPERATURE,
 }
 
 slider_max_token = {
     "class": st.slider,
-    "args": (),
     "kwargs": {
         "label": "Max token",
         "value": 1000,
         "min_value": 1,
         "max_value": 8000,
         "step": 1,
-        "response_key": Placeholder.GENERATE_MAX_TOKEN,
     },
+    "response_key": Placeholder.GENERATE_MAX_TOKEN,
 }
 
 generate_param_layout_config = [
-    slider_top_p,
-    slider_top_k,
-    slider_temperature,
-    slider_max_token,
+    {
+        "class": st.expander,
+        "args": ("Generate Parameters",),
+        "kwargs": {},
+        "children": [
+            slider_top_p,
+            slider_top_k,
+            slider_temperature,
+            slider_max_token,
+            {"class": st.container, "args": (), "kwargs": {"height": 50, "border": True}},
+        ],
+    },
     {
         "class": st.button,
-        "args": (),
         "kwargs": {
             "label": "Generate",
             "type": "primary",
-            "response_key": Placeholder.GENERATE_RESPONSE,
         },
+        "response_key": Placeholder.GENERATE_RESPONSE,
     },
+    # {
+    #     "condition": Placeholder.GENERATE_RESPONSE,
+    #     "class": st.fragment,
+    #     "children": [
+    #         {
+    #             "class": st.columns,
+    #             "args": (2,),
+    #             "children": [
+    #                 [slider_top_p, slider_top_k],
+    #                 [slider_temperature, slider_max_token]
+    #             ],
+    #         },
+    #     ]
+    # },
+    # {
+    #     "condition": {"class": st.button, "args": ("Generate",)},
+    #     "class": enable_params,
+    #     "args": (Placeholder.GENERATE_RESPONSE,),
+    #     "response_key": Placeholder.HISTORY_ANSWER,
+    # },
     {
-        "condition": Placeholder.GENERATE_RESPONSE,
-        "class": enable_params,
-        "args": (Placeholder.GENERATE_RESPONSE,),
-        "kwargs": {"response_key": Placeholder.HISTORY_ANSWER},
-    },
-    {
-        "condition": Placeholder.HISTORY_ANSWER,
+        "condition": {"class": st.toggle, "args": ("Generate",)},
         "class": st.text_area,
         "args": (),
         "kwargs": {
@@ -99,7 +116,7 @@ generate_param_layout_config = [
     }
 ]
 
-LayoutRenderer().render_page(generate_param_layout_config)
+LayoutRenderer().render_layout(generate_param_layout_config)
 def is_context_manager(obj) -> bool:
     return hasattr(obj, '__enter__') and hasattr(obj, '__exit__')
 
