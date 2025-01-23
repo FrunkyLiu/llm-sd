@@ -44,13 +44,11 @@ class LayoutRenderer:
         args = condition.get("args", ())
         kwargs = condition.get("kwargs", {})
         response_key = condition.get("response_key", None)
-        persist_response = condition.get("persist_response", None)
 
         return self._build_streamlit(
             st_element,
             *args,
             response_key=response_key,
-            persist_response=persist_response,
             **kwargs
         )
 
@@ -105,12 +103,10 @@ class LayoutRenderer:
             args = config.get("args", ())
             kwargs = config.get("kwargs", {})
             response_key = config.get("response_key")
-            persist_response = config.get("persist_response", None)
             self._build_streamlit(
                 st_element,
                 *args,
                 response_key=response_key,
-                persist_response=persist_response,
                 **kwargs
             )
         return
