@@ -9,7 +9,11 @@ from utils.context_key import create_context_key
 class LayoutRenderer:
 
     def _placeholder_wrapper(
-        self, st_element: Callable, *args, response_key=None, **kwargs
+        self,
+        st_element: Callable,
+        *args,
+        response_key=None,
+        **kwargs
     ):
         sig = inspect.signature(st_element)
         has_key_param = "key" in sig.parameters
@@ -40,9 +44,14 @@ class LayoutRenderer:
         args = condition.get("args", ())
         kwargs = condition.get("kwargs", {})
         response_key = condition.get("response_key", None)
+        persist_response = condition.get("persist_response", None)
 
         return self._build_streamlit(
-            st_element, *args, response_key=response_key, **kwargs
+            st_element,
+            *args,
+            response_key=response_key,
+            persist_response=persist_response,
+            **kwargs
         )
 
     def __is_context_manager(self, obj) -> bool:
@@ -96,28 +105,22 @@ class LayoutRenderer:
             args = config.get("args", ())
             kwargs = config.get("kwargs", {})
             response_key = config.get("response_key")
+            persist_response = config.get("persist_response", None)
             self._build_streamlit(
-                st_element, *args, response_key=response_key, **kwargs
+                st_element,
+                *args,
+                response_key=response_key,
+                persist_response=persist_response,
+                **kwargs
             )
-
-        st.write(st.session_state)
         return
 
-    def render_page(self, configs: list[Dict]):
-        for config in configs:
-            if "condition" in config:
-                condition = config["condition"]
-                if not Placeholder.get_value(condition):
-                    continue
-            if "children" in config:
-                self._children_parser(config)
-                continue
-            st_element = config["class"]
-            args = config.get("args", ())
-            kwargs: Dict = config.get("kwargs", {})
-            response_key = config.pop("response_key")
-            self._build_streamlit(
-                st_element, *args, response_key=response_key, **kwargs
-            )
+    def render_page(self, configs: Dict[str, List[Dict[str, Any]]]) -> None:
+        sidebar_configs = configs.get("sidebar", [])
+        body_configs = configs.get("body", [])
+        if sidebar_configs:
+            with st.sidebar:
+                self.render_layout(sidebar_configs)
+        self.render_layout(body_configs)
         st.write(st.session_state)
         return
