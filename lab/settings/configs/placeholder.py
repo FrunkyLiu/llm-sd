@@ -1,5 +1,6 @@
 from enum import Enum, auto
-
+import logging
+import streamlit as st
 from utils.session_state_registry import Registry
 
 
@@ -29,6 +30,7 @@ class Placeholder(Enum):
     def update_param_placeholders(cls, *args, **kwargs):
         def _resolve(item):
             # 如果是我們的包裝物件，呼叫它的 get_value() 拿最終結果
+            logging.info(f"Item: {item}")
             if isinstance(item, _PlaceholderCall):
                 return item.get_value()
             # 如果是原本的 Placeholder，直接取
@@ -43,6 +45,8 @@ class Placeholder(Enum):
 
     @classmethod
     def get_value(cls, placeholder):
+        if isinstance(placeholder, _PlaceholderCall):
+            return placeholder.get_value()
         return Registry.get(placeholder)
 
 
@@ -52,16 +56,40 @@ class _PlaceholderCall:
     當最終在 update_param_placeholders 時，
     才會真的呼叫 get_value() 來從 Registry 拿值並做轉換。
     """
-    def __init__(self, placeholder, invert=False):
+
+    def __init__(self, placeholder, invert=False, persist=False):
         self.placeholder = placeholder
         self.invert = invert
+        self.persist = persist
+        if "persist" not in st.session_state:
+            st.session_state["persist"] = {self.placeholder: {}}
+        elif self.placeholder not in st.session_state["persist"]:
+            st.session_state["persist"][self.placeholder] = {}
 
     def __str__(self):
         return f"PlaceholderCall({self.placeholder})"
 
     def get_value(self):
         val = Registry.get(self.placeholder)
+        if self.persist:
+            logging.info(st.session_state["persist"])
+            if "first" not in st.session_state["persist"].get(
+                self.placeholder, {}
+            ):
+                st.session_state["persist"][self.placeholder] = {"first": val}
+            elif "last" not in st.session_state["persist"].get(
+                self.placeholder, {}
+            ):
+                if (
+                    st.session_state["persist"][self.placeholder]["first"]
+                    != val
+                ):
+                    st.session_state["persist"][self.placeholder].update(
+                        {"last": val}
+                    )
+            else:
+                val = st.session_state["persist"][self.placeholder]["last"]
         # 例如做反轉布林
         if self.invert:
-            val = not val
+            val = not bool(val)
         return val

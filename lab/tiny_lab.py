@@ -1,8 +1,8 @@
 import inspect
 from typing import Any, Callable, Dict, List
-
+import logging
 import streamlit as st
-from settings.configs.placeholder import Placeholder
+from settings.configs.placeholder import Placeholder, _PlaceholderCall
 from utils.context_key import create_context_key
 
 
@@ -33,11 +33,12 @@ class LayoutRenderer:
         result = st_element(*args, **kwargs)
 
         if not has_key_param:
+            logging.info(f"Set session state: {key} = {result}")
             st.session_state[key] = result
         return result
 
     def _check_condition(self, condition: Dict[str, Any]) -> bool:
-        if isinstance(condition, Placeholder):
+        if isinstance(condition, (Placeholder, _PlaceholderCall)):
             return bool(Placeholder.get_value(condition))
 
         st_element = condition["class"]
@@ -91,6 +92,7 @@ class LayoutRenderer:
             # Check conditions early and continue if not met
             if "condition" in config:
                 if not self._check_condition(config["condition"]):
+                    print(config)
                     continue
 
             # Handle children configurations
@@ -109,6 +111,7 @@ class LayoutRenderer:
                 response_key=response_key,
                 **kwargs
             )
+        st.write(st.session_state)
         return
 
     def render_page(self, configs: Dict[str, List[Dict[str, Any]]]) -> None:
