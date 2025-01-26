@@ -85,12 +85,13 @@ class LayoutRenderer:
             self._build_streamlit(
                 st_element, *args, response_key=response_key, **kwargs
             )
-        st.write(st.session_state)
         return
 
     def render_page(self, configs: Dict[str, List[Dict[str, Any]]]) -> None:
+        page_name = configs.get("page_name", "Page")
         sidebar_configs = configs.get("sidebar", [])
         body_configs = configs.get("body", [])
+        Placeholder._CURRENT_PAGE.set(page_name)
         if sidebar_configs:
             with st.sidebar:
                 self.render_layout(sidebar_configs)

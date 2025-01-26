@@ -1,3 +1,5 @@
+import logging
+
 import streamlit as st
 
 
@@ -19,43 +21,45 @@ class PlaceholderValue:
             self._value = default
 
         if persist:
-            if "persist" not in st.session_state:
-                st.session_state["persist"] = {self._name: {}}
-            elif self._name not in st.session_state["persist"]:
-                st.session_state["persist"][self._name] = {}
+            st.session_state.setdefault("persist", {})
+
+    def _get_key(self):
+        if self._name == "_CURRENT_PAGE":
+            return self._name
+        current_page = Placeholder._CURRENT_PAGE.get()
+        return f"{current_page}_{self._name}"
 
     def __set_name__(self, owner, name):
-        print(f"[PlaceholderValue] __set_name__ called: {owner}, {name}")
         self._name = name
 
     def __set__(self, obj, value):
         self.set(value)
 
     def set(self, value):
+        key = self._get_key()
         st.session_state.setdefault("_placeholder_values", {})
-        st.session_state["_placeholder_values"][self._name] = value
+        st.session_state["_placeholder_values"][key] = value
         self._value = value
 
     def __get__(self, obj, objtype=None):
-        if obj is None:
-            return self
-        return self.get()
+        return self
 
     def get(self):
+        key = self._get_key()
         placeholder_values = st.session_state.get("_placeholder_values", {})
-        if self._name not in placeholder_values:
+        logging.debug(f"Get Persisting {key} with value {placeholder_values}")
+        if key not in placeholder_values:
             return None
-        val = placeholder_values.get(self._name, None)
+        val = placeholder_values.get(key, None)
+
         if self.persist:
-            if "first" not in st.session_state["persist"].get(self._name, {}):
-                st.session_state["persist"][self._name] = {"first": val}
-            elif "last" not in st.session_state["persist"].get(self._name, {}):
-                if st.session_state["persist"][self._name]["first"] != val:
-                    st.session_state["persist"][self._name].update(
-                        {"last": val}
-                    )
+            if "first" not in st.session_state["persist"].get(key, {}):
+                st.session_state["persist"][key] = {"first": val}
+            elif "last" not in st.session_state["persist"].get(key, {}):
+                if st.session_state["persist"][key]["first"] != val:
+                    st.session_state["persist"][key].update({"last": val})
             else:
-                val = st.session_state["persist"][self._name]["last"]
+                val = st.session_state["persist"][key]["last"]
         if self.invert:
             val = not bool(val)
         self._value = val
@@ -92,6 +96,7 @@ class PlaceholderMeta(type):
 
 
 class Placeholder(metaclass=PlaceholderMeta):
+    _CURRENT_PAGE = PlaceholderValue()
 
     @classmethod
     def update_param_placeholders(cls, *args, **kwargs):
@@ -111,7 +116,7 @@ class MyPlaceholder(Placeholder):
     GENERATE_TOP_K = PlaceholderValue()
     GENERATE_TEMPERATURE = PlaceholderValue()
     GENERATE_MAX_TOKEN = None
-    GENERATE_RESPONSE = None
+    GENERATE_RESPONSE = PlaceholderValue()
     QUERY = None
     HISTORY_ANSWER = None
     INSTRUCTIONS = None
