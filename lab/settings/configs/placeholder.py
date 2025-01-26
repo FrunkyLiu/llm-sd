@@ -1,41 +1,103 @@
-from enum import Enum, auto
-import logging
 import streamlit as st
-from utils.session_state_registry import Registry
 
 
-class Placeholder(Enum):
-    GENERATE_TOP_P = auto()
-    GENERATE_TOP_K = auto()
-    GENERATE_TEMPERATURE = auto()
-    GENERATE_MAX_TOKEN = auto()
-    GENERATE_RESPONSE = auto()
+class PlaceholderValue:
+    def __init__(self, name=None, default=None, invert=False, persist=False):
+        self._name = name
+        self._value = None
+        self._configure(default=default, invert=invert, persist=persist)
 
-    QUERY = auto()
+    def __call__(self, default=None, invert=False, persist=False):
+        self._configure(default=default, invert=invert, persist=persist)
+        return self
 
-    HISTORY_ANSWER = auto()
-    INSTRUCTIONS = auto()
-    FILLED_PROMPT = auto()
-    ENABLE = auto()
+    def _configure(self, default=None, invert=False, persist=False):
+        self.invert = invert
+        self.persist = persist
+        if default is not None:
+            self.set(default)
+            self._value = default
 
-    def __call__(self, *args, **kwargs):
-        # val = Registry.get(self)
-        return _PlaceholderCall(self, **kwargs)
+        if persist:
+            if "persist" not in st.session_state:
+                st.session_state["persist"] = {self._name: {}}
+            elif self._name not in st.session_state["persist"]:
+                st.session_state["persist"][self._name] = {}
 
-    @classmethod
-    def bind_placeholder(cls, placeholder, value):
-        Registry.register(placeholder, value)
+    def __set_name__(self, owner, name):
+        print(f"[PlaceholderValue] __set_name__ called: {owner}, {name}")
+        self._name = name
+
+    def __set__(self, obj, value):
+        self.set(value)
+
+    def set(self, value):
+        st.session_state.setdefault("_placeholder_values", {})
+        st.session_state["_placeholder_values"][self._name] = value
+        self._value = value
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return self.get()
+
+    def get(self):
+        placeholder_values = st.session_state.get("_placeholder_values", {})
+        if self._name not in placeholder_values:
+            return None
+        val = placeholder_values.get(self._name, None)
+        if self.persist:
+            if "first" not in st.session_state["persist"].get(self._name, {}):
+                st.session_state["persist"][self._name] = {"first": val}
+            elif "last" not in st.session_state["persist"].get(self._name, {}):
+                if st.session_state["persist"][self._name]["first"] != val:
+                    st.session_state["persist"][self._name].update(
+                        {"last": val}
+                    )
+            else:
+                val = st.session_state["persist"][self._name]["last"]
+        if self.invert:
+            val = not bool(val)
+        self._value = val
+        return val
+
+    def __repr__(self):
+        return f"<PlaceholderValue name={self._name}, value={self._value}>"
+
+
+class PlaceholderMeta(type):
+    def __new__(mcs, name, bases, attrs):
+        new_attrs = {}
+        for k, v in attrs.items():
+            if k.startswith("__") and k.endswith("__"):
+                new_attrs[k] = v
+                continue
+
+            if not (hasattr(v, "__get__") or hasattr(v, "__set__")):
+                new_attrs[k] = PlaceholderValue(default=v)
+            else:
+                new_attrs[k] = v
+
+        cls = super().__new__(mcs, name, bases, new_attrs)
+        return cls
+
+    def __setattr__(cls, name, value):
+        if hasattr(cls, name):
+            current_attr = getattr(cls, name)
+            if isinstance(current_attr, PlaceholderValue):
+                current_attr.set(value)
+                return
+        descriptor = PlaceholderValue(name=name, default=value)
+        super(PlaceholderMeta, cls).__setattr__(name, descriptor)
+
+
+class Placeholder(metaclass=PlaceholderMeta):
 
     @classmethod
     def update_param_placeholders(cls, *args, **kwargs):
         def _resolve(item):
-            # 如果是我們的包裝物件，呼叫它的 get_value() 拿最終結果
-            logging.info(f"Item: {item}")
-            if isinstance(item, _PlaceholderCall):
-                return item.get_value()
-            # 如果是原本的 Placeholder，直接取
-            elif isinstance(item, cls):
-                return Registry.get(item)
+            if isinstance(item, PlaceholderValue):
+                return item.get()
             else:
                 return item
 
@@ -43,53 +105,15 @@ class Placeholder(Enum):
         new_kwargs = {k: _resolve(v) for k, v in kwargs.items()}
         return new_args, new_kwargs
 
-    @classmethod
-    def get_value(cls, placeholder):
-        if isinstance(placeholder, _PlaceholderCall):
-            return placeholder.get_value()
-        return Registry.get(placeholder)
 
-
-class _PlaceholderCall:
-    """
-    專門包裝「Placeholder + 額外參數」的物件。
-    當最終在 update_param_placeholders 時，
-    才會真的呼叫 get_value() 來從 Registry 拿值並做轉換。
-    """
-
-    def __init__(self, placeholder, invert=False, persist=False):
-        self.placeholder = placeholder
-        self.invert = invert
-        self.persist = persist
-        if "persist" not in st.session_state:
-            st.session_state["persist"] = {self.placeholder: {}}
-        elif self.placeholder not in st.session_state["persist"]:
-            st.session_state["persist"][self.placeholder] = {}
-
-    def __str__(self):
-        return f"PlaceholderCall({self.placeholder})"
-
-    def get_value(self):
-        val = Registry.get(self.placeholder)
-        if self.persist:
-            logging.info(st.session_state["persist"])
-            if "first" not in st.session_state["persist"].get(
-                self.placeholder, {}
-            ):
-                st.session_state["persist"][self.placeholder] = {"first": val}
-            elif "last" not in st.session_state["persist"].get(
-                self.placeholder, {}
-            ):
-                if (
-                    st.session_state["persist"][self.placeholder]["first"]
-                    != val
-                ):
-                    st.session_state["persist"][self.placeholder].update(
-                        {"last": val}
-                    )
-            else:
-                val = st.session_state["persist"][self.placeholder]["last"]
-        # 例如做反轉布林
-        if self.invert:
-            val = not bool(val)
-        return val
+class MyPlaceholder(Placeholder):
+    GENERATE_TOP_P = PlaceholderValue()
+    GENERATE_TOP_K = PlaceholderValue()
+    GENERATE_TEMPERATURE = PlaceholderValue()
+    GENERATE_MAX_TOKEN = None
+    GENERATE_RESPONSE = None
+    QUERY = None
+    HISTORY_ANSWER = None
+    INSTRUCTIONS = None
+    FILLED_PROMPT = None
+    ENABLE = None

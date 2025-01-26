@@ -1,45 +1,27 @@
-import inspect
-from typing import Any, Callable, Dict, List
-import logging
+from typing import Any, Callable, Dict, List, Union
+
 import streamlit as st
-from settings.configs.placeholder import Placeholder, _PlaceholderCall
-from utils.context_key import create_context_key
+from settings.configs.placeholder import Placeholder, PlaceholderValue
 
 
 class LayoutRenderer:
 
     def _placeholder_wrapper(
-        self,
-        st_element: Callable,
-        *args,
-        response_key=None,
-        **kwargs
+        self, st_element: Callable, *args, response_key=None, **kwargs
     ):
-        sig = inspect.signature(st_element)
-        has_key_param = "key" in sig.parameters
-        if "key" not in kwargs:
-
-            key = create_context_key(*args, **kwargs)
-            if has_key_param:
-                kwargs["key"] = key
-        else:
-            key = kwargs["key"]
-
-        if response_key:
-            Placeholder.bind_placeholder(response_key, key)
-
         args, kwargs = Placeholder.update_param_placeholders(*args, **kwargs)
 
         result = st_element(*args, **kwargs)
 
-        if not has_key_param:
-            logging.info(f"Set session state: {key} = {result}")
-            st.session_state[key] = result
+        if response_key:
+            response_key.set(result)
         return result
 
-    def _check_condition(self, condition: Dict[str, Any]) -> bool:
-        if isinstance(condition, (Placeholder, _PlaceholderCall)):
-            return bool(Placeholder.get_value(condition))
+    def _check_condition(
+        self, condition: Union[PlaceholderValue, Dict[str, Any]]
+    ) -> bool:
+        if isinstance(condition, PlaceholderValue):
+            return bool(condition.get())
 
         st_element = condition["class"]
         args = condition.get("args", ())
@@ -47,10 +29,7 @@ class LayoutRenderer:
         response_key = condition.get("response_key", None)
 
         return self._build_streamlit(
-            st_element,
-            *args,
-            response_key=response_key,
-            **kwargs
+            st_element, *args, response_key=response_key, **kwargs
         )
 
     def __is_context_manager(self, obj) -> bool:
@@ -78,7 +57,6 @@ class LayoutRenderer:
         st_element = config["class"]
         args = config.get("args", ())
         kwargs: Dict = config.get("kwargs", {})
-        # response_key = config.get("response_key", None)
         st_obj = st_element(*args, **kwargs)
         children = config.get("children", [])
 
@@ -92,7 +70,6 @@ class LayoutRenderer:
             # Check conditions early and continue if not met
             if "condition" in config:
                 if not self._check_condition(config["condition"]):
-                    print(config)
                     continue
 
             # Handle children configurations
@@ -106,10 +83,7 @@ class LayoutRenderer:
             kwargs = config.get("kwargs", {})
             response_key = config.get("response_key")
             self._build_streamlit(
-                st_element,
-                *args,
-                response_key=response_key,
-                **kwargs
+                st_element, *args, response_key=response_key, **kwargs
             )
         st.write(st.session_state)
         return
