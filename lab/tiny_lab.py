@@ -1,4 +1,5 @@
 from typing import Any, Callable, Dict, List, Union
+import inspect
 
 import streamlit as st
 from settings.configs.placeholder import Placeholder, PlaceholderValue
@@ -9,12 +10,14 @@ class LayoutRenderer:
     def _placeholder_wrapper(
         self, st_element: Callable, *args, response_key=None, **kwargs
     ):
-        args, kwargs = Placeholder.update_param_placeholders(*args, **kwargs)
+        sig = inspect.signature(st_element)
+        has_key_param = "key" in sig.parameters
+        args, kwargs = Placeholder.update_param_placeholders(has_key_param, response_key, *args, **kwargs)
 
         result = st_element(*args, **kwargs)
 
         if response_key:
-            response_key.set(result)
+            response_key.set(result, has_key_param=has_key_param)
         return result
 
     def _check_condition(
