@@ -1,23 +1,56 @@
-from typing import Any, Callable, Dict, List, Union
+import functools
 import inspect
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Union,
+)
 
 import streamlit as st
 from settings.configs.placeholder import Placeholder, PlaceholderValue
 
 
+def placeholder_transformer(func):
+    @functools.wraps(func)
+    def wrapper(
+        call_function: Callable,
+        func_args: Iterable,
+        func_kwargs: Mapping,
+        result_key: Optional[PlaceholderValue] = None,
+    ):
+        sig = inspect.signature(call_function)
+        has_key_param = "key" in sig.parameters
+        func_args, func_kwargs = Placeholder.update_param_placeholders(
+            has_key_param, result_key, *func_args, **func_kwargs
+        )
+        result = call_function(*func_args, **func_kwargs)
+        if result_key:
+            result_key.set(result, has_key_param=has_key_param)
+        return result
+
+    return wrapper
+
+
 class LayoutRenderer:
 
     def _placeholder_wrapper(
-        self, st_element: Callable, *args, response_key=None, **kwargs
+        self, st_element: Callable, *args, result_key=None, **kwargs
     ):
         sig = inspect.signature(st_element)
         has_key_param = "key" in sig.parameters
-        args, kwargs = Placeholder.update_param_placeholders(has_key_param, response_key, *args, **kwargs)
+        args, kwargs = Placeholder.update_param_placeholders(
+            has_key_param, result_key, *args, **kwargs
+        )
 
         result = st_element(*args, **kwargs)
 
-        if response_key:
-            response_key.set(result, has_key_param=has_key_param)
+        if result_key:
+            result_key.set(result, has_key_param=has_key_param)
         return result
 
     def _check_condition(
@@ -26,13 +59,13 @@ class LayoutRenderer:
         if isinstance(condition, PlaceholderValue):
             return bool(condition.get())
 
-        st_element = condition["class"]
+        st_element = condition["component"]
         args = condition.get("args", ())
         kwargs = condition.get("kwargs", {})
-        response_key = condition.get("response_key", None)
+        result_key = condition.get("result_key", None)
 
         return self._build_streamlit(
-            st_element, *args, response_key=response_key, **kwargs
+            st_element, *args, result_key=result_key, **kwargs
         )
 
     def __is_context_manager(self, obj) -> bool:
@@ -57,7 +90,7 @@ class LayoutRenderer:
             st_obj(self.render_layout)(children)
 
     def _children_parser(self, config: Dict):
-        st_element = config["class"]
+        st_element = config["component"]
         args = config.get("args", ())
         kwargs: Dict = config.get("kwargs", {})
         st_obj = st_element(*args, **kwargs)
@@ -81,12 +114,12 @@ class LayoutRenderer:
                 continue
 
             # Process regular streamlit elements
-            st_element = config["class"]
+            st_element = config["component"]
             args = config.get("args", ())
             kwargs = config.get("kwargs", {})
-            response_key = config.get("response_key")
+            result_key = config.get("result_key")
             self._build_streamlit(
-                st_element, *args, response_key=response_key, **kwargs
+                st_element, *args, result_key=result_key, **kwargs
             )
         return
 
