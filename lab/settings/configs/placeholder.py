@@ -1,3 +1,4 @@
+import inspect
 import logging
 
 import streamlit as st
@@ -20,7 +21,7 @@ class PlaceholderValue:
         self.invert = invert
         self.persist = persist
 
-    def _get_key(self):
+    def get_key(self):
         if self._name == "_CURRENT_PAGE":
             return self._name
         current_page = Placeholder._CURRENT_PAGE.get()
@@ -35,19 +36,19 @@ class PlaceholderValue:
     def __get__(self, obj, objtype=None):
         return self
 
-    def set(self, value, *, has_key_param=False, key=None):
+    def set(self, value, *, key=None):
         if key is None:
-            key = self._get_key()
+            key = self.get_key()
 
         session_state = st.session_state.setdefault("_placeholder_values", {})
         session_state[key] = value
-        if not has_key_param:
+        if key not in st.session_state:
             st.session_state[key] = value
         self._value = value
 
     def get(self, *, key=None):
         if key is None:
-            key = self._get_key()
+            key = self.get_key()
 
         if key in st.session_state:
             val = st.session_state[key]
@@ -105,19 +106,19 @@ class Placeholder(metaclass=PlaceholderMeta):
     _CURRENT_PAGE = PlaceholderValue()
 
     @classmethod
-    def update_param_placeholders(
-        cls, has_key_param, response_key, *args, **kwargs
-    ):
+    def update_param_placeholders(cls, obj, obj_args, obj_kwargs, result_key):
         def _resolve(item):
             if isinstance(item, PlaceholderValue):
                 return item.get()
             else:
                 return item
 
-        new_args = [_resolve(arg) for arg in args]
-        new_kwargs = {k: _resolve(v) for k, v in kwargs.items()}
-        if has_key_param and response_key:
-            new_kwargs["key"] = response_key._get_key()
+        sig = inspect.signature(obj)
+        has_key_param = "key" in sig.parameters
+        new_args = [_resolve(arg) for arg in obj_args]
+        new_kwargs = {k: _resolve(v) for k, v in obj_kwargs.items()}
+        if has_key_param and result_key:
+            new_kwargs["key"] = result_key.get_key()
         return new_args, new_kwargs
 
 
