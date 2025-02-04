@@ -7,19 +7,19 @@ import streamlit as st
 class PlaceholderValue:
     def __init__(self, name=None, default=None, invert=False, persist=False):
         self._name = name
-        self._default = None
-        self.invert = None
-        self.persist = None
-        self._configure(default=default, invert=invert, persist=persist)
-
-    def __call__(self, default=None, invert=False, persist=False):
-        self._configure(default=default, invert=invert, persist=persist)
-        return self
-
-    def _configure(self, default=None, invert=False, persist=False):
         self._default = default
         self.invert = invert
         self.persist = persist
+        if self._default is not None and self._name is not None:
+            self.set(self._default)
+
+    def __call__(self, default=None, invert=False, persist=False):
+        self._default = default
+        self.invert = invert
+        self.persist = persist
+        if self._default is not None and self._name is not None:
+            self.set(self._default)
+        return self
 
     def get_key(self):
         if self._name == "_CURRENT_PAGE":
@@ -42,9 +42,7 @@ class PlaceholderValue:
 
         session_state = st.session_state.setdefault("_placeholder_values", {})
         session_state[key] = value
-        if key not in st.session_state:
-            st.session_state[key] = value
-        self._value = value
+        st.session_state.setdefault(key, value)
 
     def get(self, *, key=None):
         if key is None:
@@ -58,47 +56,44 @@ class PlaceholderValue:
             val = self._default
 
         if self.persist:
-            if "first" not in st.session_state.setdefault("_persist", {}).get(
-                key, {}
-            ):
-                st.session_state["_persist"][key] = {"first": val}
-            elif "last" not in st.session_state["_persist"].get(key, {}):
-                if st.session_state["_persist"][key]["first"] != val:
-                    st.session_state["_persist"][key].update({"last": val})
-            else:
-                val = st.session_state["_persist"][key]["last"]
+            persist_data = st.session_state.setdefault("_persist", {})
+            key_data = persist_data.setdefault(key, {})
+            if "first" not in key_data:
+                key_data["first"] = val
+            elif "last" not in key_data and key_data["first"] != val:
+                key_data["last"] = val
+            elif "last" in key_data:
+                val = key_data["last"]
+
         if self.invert:
             val = not bool(val)
-        self._value = val
         return val
 
     def __repr__(self):
-        return f"<PlaceholderValue name={self._name}, value={self._value}>"
+        return f"<PlaceholderValue name={self._name}>"
 
 
 class PlaceholderMeta(type):
     def __new__(mcs, name, bases, attrs):
         new_attrs = {}
-        for k, v in attrs.items():
-            if k.startswith("__") and k.endswith("__"):
-                new_attrs[k] = v
-                continue
-
-            if not (hasattr(v, "__get__") or hasattr(v, "__set__")):
-                new_attrs[k] = PlaceholderValue(default=v)
+        for key, value in attrs.items():
+            if key.startswith("__") and key.endswith("__"):
+                new_attrs[key] = value
+            elif hasattr(value, "__get__") or hasattr(value, "__set__"):
+                new_attrs[key] = value
             else:
-                new_attrs[k] = v
-
-        cls = super().__new__(mcs, name, bases, new_attrs)
-        return cls
+                new_attrs[key] = PlaceholderValue(name=key, default=value)
+        return super().__new__(mcs, name, bases, new_attrs)
 
     def __setattr__(cls, name, value):
-        if hasattr(cls, name):
-            current_attr = getattr(cls, name)
-            if isinstance(current_attr, PlaceholderValue):
-                current_attr.set(value)
-                return
-        descriptor = PlaceholderValue(name=name, default=value)
+        if isinstance(value, PlaceholderValue):
+            value.__set_name__(cls, name)
+            descriptor = value
+        elif hasattr(cls, name):
+            descriptor = getattr(cls, name)
+            descriptor.set(value)
+        else:
+            descriptor = PlaceholderValue(name=name, default=value)
         super(PlaceholderMeta, cls).__setattr__(name, descriptor)
 
 
@@ -120,6 +115,10 @@ class Placeholder(metaclass=PlaceholderMeta):
         if has_key_param and result_key:
             new_kwargs["key"] = result_key.get_key()
         return new_args, new_kwargs
+
+    @classmethod
+    def set_attr(cls, name, value):
+        setattr(cls, name, value)
 
 
 class MyPlaceholder(Placeholder):
