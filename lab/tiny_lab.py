@@ -30,37 +30,20 @@ class LayoutRenderer:
             result_key.set(result)
         return result
 
-    def _check_condition(
-        self, condition: Union[PlaceholderValue, Dict[str, Any]]
-    ) -> bool:
-        if isinstance(condition, PlaceholderValue):
-            return bool(condition.get())
-
-        component = condition["component"]
-        args = condition.get("args", ())
-        kwargs = condition.get("kwargs", {})
-        result_key = condition.get("result_key", None)
-
-        return self._build_obj(
-            component, args, kwargs, result_key=result_key
-        )
+    def _build_component(
+        self,
+        component: Callable,
+        args: Iterable,
+        kwargs: Mapping,
+        result_key: Optional[PlaceholderValue] = None,
+    ):
+        result = self._placeholder_wrapper(component, args, kwargs, result_key)
+        return result
 
     def __is_context_manager(self, obj) -> bool:
         return hasattr(obj, "__enter__") and hasattr(obj, "__exit__")
 
-    def _build_obj(
-        self,
-        obj: Callable,
-        obj_args: Iterable,
-        obj_kwargs: Mapping,
-        result_key: Optional[PlaceholderValue] = None,
-    ):
-        result = self._placeholder_wrapper(obj, obj_args, obj_kwargs, result_key)
-        return result
-
-    def _handle_objects(
-        self, obj: Any, children: List[Dict]
-    ) -> None:
+    def _handle_objects(self, obj: Any, children: List[Dict]) -> None:
         if isinstance(obj, (list, tuple)):
             for i, obj in enumerate(obj):
                 if children[i] is not None:
@@ -84,12 +67,28 @@ class LayoutRenderer:
 
         self._handle_objects(obj, children)
 
+    def _check_condition(
+        self, condition: Union[PlaceholderValue, Dict[str, Any]]
+    ) -> bool:
+        if isinstance(condition, PlaceholderValue):
+            return bool(condition.get())
+
+        component = condition["component"]
+        args = condition.get("args", ())
+        kwargs = condition.get("kwargs", {})
+        result_key = condition.get("result_key", None)
+
+        return self._build_component(
+            component, args, kwargs, result_key=result_key
+        )
+
     def render_layout(self, configs: List[Dict[str, Any]]) -> None:
         for config in configs:
             # Check conditions early and continue if not met
-            if "condition" in config:
-                if not self._check_condition(config["condition"]):
-                    continue
+            if "condition" in config and not self._check_condition(
+                config["condition"]
+            ):
+                continue
 
             # Handle children configurations
             if "children" in config:
@@ -101,7 +100,7 @@ class LayoutRenderer:
             args = config.get("args", ())
             kwargs = config.get("kwargs", {})
             result_key = config.get("result_key")
-            self._build_obj(
+            self._build_component(
                 component, args, kwargs, result_key=result_key
             )
         return
