@@ -10,15 +10,11 @@ class PlaceholderValue:
         self._default = default
         self.invert = invert
         self.persist = persist
-        if self._default is not None and self._name is not None:
-            self.set(self._default)
 
     def __call__(self, default=None, invert=False, persist=False):
         self._default = default
         self.invert = invert
         self.persist = persist
-        if self._default is not None and self._name is not None:
-            self.set(self._default)
         return self
 
     def get_key(self):
@@ -39,10 +35,8 @@ class PlaceholderValue:
     def set(self, value, *, key=None):
         if key is None:
             key = self.get_key()
-
         session_state = st.session_state.setdefault("_placeholder_values", {})
         session_state[key] = value
-        st.session_state.setdefault(key, value)
 
     def get(self, *, key=None):
         if key is None:
